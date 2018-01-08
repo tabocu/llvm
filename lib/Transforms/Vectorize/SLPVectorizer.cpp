@@ -1348,7 +1348,6 @@ void BoUpSLP::buildTree(ArrayRef<Value *> Roots,
         DEBUG(dbgs() << "SLP: Need to extract: Extra arg from lane " <<
               Lane << " from " << *Scalar << ".\n");
         ExternalUses.emplace_back(Scalar, nullptr, Lane);
-        continue;
       }
       for (User *U : Scalar->users()) {
         DEBUG(dbgs() << "SLP: Checking user:" << *U << ".\n");
