@@ -4175,7 +4175,7 @@ LoopUnrollResult tryToUnrollLoop(unsigned Count, Loop *L, LoopInfo *LI_,
                                  AssumptionCache *AC_,
                                  OptimizationRemarkEmitter *ORE_) {
 
-  if (L->isLoopSimplifyForm()) {
+  if (!L->isLoopSimplifyForm()) {
     dbgs() << "Loop is not on a simplified form.\n";
     return LoopUnrollResult::Unmodified;
   }
@@ -4260,15 +4260,13 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
   // A general note: the vectorizer must use BoUpSLP::eraseInstruction() to
   // delete instructions.
 
-
+  // Unroll Loops before Vectorizing
+  // TODO: Fetch count factor from architeture target spec
   for (auto BB : post_order(&F.getEntryBlock())) {
-
+      auto *L = LI->getLoopFor(BB);
+      if (L && L->getSubLoops().empty())
+        tryToUnrollLoop(4, L, LI_, SE_, DT_, AC_, ORE_);
   }
-
-
-
-
-
 
   // Scan the blocks in the function in post order.
   for (auto BB : post_order(&F.getEntryBlock())) {
