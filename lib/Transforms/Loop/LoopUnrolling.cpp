@@ -1,4 +1,6 @@
 #include "llvm/Transforms/Loop/LoopUnrolling.h"
+
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
@@ -8,8 +10,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/UnrollLoop.h"
-
-#include <vector>
 
 using namespace llvm;
 
@@ -21,20 +21,46 @@ static RegisterPass<LoopUnrolling> X("loop-unrolling", "Loop Unrolling Pass", fa
 
 namespace
 {
-	std::string toString(const LoopUnrollResult& loopUnrollResult)
-	{
-		switch (loopUnrollResult)
-		{
-			case LoopUnrollResult::FullyUnrolled: return "FullyUnrolled";
-			case LoopUnrollResult::PartiallyUnrolled: return "PartiallyUnrolled";
-			case LoopUnrollResult::Unmodified: return "Unmodified";
-		}
-		return {};
-	}
+    std::string toString(const LoopUnrollResult& loopUnrollResult)
+    {
+        switch (loopUnrollResult)
+        {
+            case LoopUnrollResult::FullyUnrolled: return "FullyUnrolled";
+            case LoopUnrollResult::PartiallyUnrolled: return "PartiallyUnrolled";
+            case LoopUnrollResult::Unmodified: return "Unmodified";
+        }
+        return {};
+    }
 }
 
 LoopUnrolling::LoopUnrolling()
     : FunctionPass(ID) {}
+
+std::vector<Loop*> LoopUnrolling::getLeafLoops(Loop& rootLoop)
+{
+    std::vector<Loop*> leafLoops;
+    std::vector<Loop*> stackLoops;
+
+    stackLoops.push_back(&rootLoop);
+    while(!stackLoops.empty())
+    {
+        auto* loop = stackLoops.back();
+        if (loop->getSubLoops().empty())
+        {
+            leafLoops.push_back(loop);
+        }
+        else
+        {
+            for (auto* leafLoop : loop->getSubLoops())
+            {
+                stackLoops.push_back(leafLoop);
+            }
+        }
+        stackLoops.pop_back();
+    }
+
+    return leafLoops;
+}
 
 LoopUnrollResult LoopUnrolling::tryToUnrollLoop(unsigned                   count,
                                                 Loop&                      loop,
@@ -107,7 +133,7 @@ LoopUnrollResult LoopUnrolling::tryToUnrollLoop(unsigned                   count
         loop.setLoopAlreadyUnrolled();
     }
 
-	dbgs() << "LoopUnrollResult: " << toString(result) << "\n";
+    dbgs() << "LoopUnrollResult: " << toString(result) << "\n";
 
     return result;
 }
@@ -121,20 +147,12 @@ bool LoopUnrolling::runOnFunction(Function& function)
     OptimizationRemarkEmitter optimizationRemarkEmitter {&function};
 
     bool modified = false;
-    std::vector<BasicBlock*> basicBlockVector;
-    for (auto basicBlockIt = function.begin();
-         basicBlockIt != function.end();
-         ++basicBlockIt)
+    for (auto basicBlock : post_order(&function.getEntryBlock()))
     {
-        BasicBlock& basicBlock = *basicBlockIt;
-        auto* loop = loopInfo.getLoopFor(&basicBlock);
-        if (!loop)
+        auto* loop = loopInfo.getLoopFor(basicBlock);
+        if (loop && loop->getSubLoops().empty())
         {
-            basicBlockVector.push_back(&basicBlock);
-        }
-        else if(loop->getHeader() == &basicBlock)
-        {
-        	auto loopUnrollResult = tryToUnrollLoop(/*count*/ 4,
+            auto loopUnrollResult = tryToUnrollLoop(/*count*/ 4,
                                                     *loop,
                                                     loopInfo,
                                                     scalarEvolution,

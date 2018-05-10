@@ -1,6 +1,6 @@
 #include "llvm/Pass.h"
 
-using namespace llvm;
+#include <vector>
 
 namespace llvm
 {
@@ -21,6 +21,8 @@ namespace llvm
         bool runOnFunction(Function &function) override;
         void getAnalysisUsage(AnalysisUsage &analysisUsage) const override;
       private:
+        static std::vector<Loop*> getLeafLoops(Loop& rootLoop);
+
         static LoopUnrollResult tryToUnrollLoop(unsigned                   count,
                                                 Loop&                      loop,
                                                 LoopInfo&                  loopInfo,
