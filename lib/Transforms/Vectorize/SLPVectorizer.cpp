@@ -85,6 +85,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
+#include "llvm/Transforms/Utils/UnrollLoop.h"
 #include "llvm/Transforms/Vectorize.h"
 #include <algorithm>
 #include <cassert>
@@ -416,7 +417,7 @@ struct InstructionsState {
 } // end anonymous namespace
 
 /// \returns analysis of the Instructions in \p VL described in
-/// InstructionsState, the Opcode that we suppose the whole list 
+/// InstructionsState, the Opcode that we suppose the whole list
 /// could be vectorized even if its structure is diverse.
 static InstructionsState getSameOpcode(ArrayRef<Value *> VL) {
   auto Res = getMainOpcode(VL);
@@ -4159,6 +4160,68 @@ PreservedAnalyses SLPVectorizerPass::run(Function &F, FunctionAnalysisManager &A
   return PA;
 }
 
+namespace {
+std::string toString(const LoopUnrollResult& loopUnrollResult) {
+  switch (loopUnrollResult) {
+    case LoopUnrollResult::FullyUnrolled: return "FullyUnrolled";
+    case LoopUnrollResult::PartiallyUnrolled: return "PartiallyUnrolled";
+    case LoopUnrollResult::Unmodified: return "Unmodified";
+  }
+  return {};
+}
+
+LoopUnrollResult tryToUnrollLoop(unsigned Count, Loop *L, LoopInfo *LI_,
+                                 ScalarEvolution *SE_, DominatorTree *DT_,
+                                 AssumptionCache *AC_,
+                                 OptimizationRemarkEmitter *ORE_) {
+
+  if (L->isLoopSimplifyForm()) {
+    dbgs() << "Loop is not on a simplified form.\n";
+    return LoopUnrollResult::Unmodified;
+  }
+
+  unsigned TripCount = 0;
+  unsigned TripMultiple = 1;
+
+  auto* ExitingBlock = L->getLoopLatch();
+  if (!ExitingBlock || !L->isLoopExiting(ExitingBlock)) {
+    dbgs() << "Has no latch or latch is not an exiting block.\n";
+    ExitingBlock = L->getExitingBlock();
+  }
+
+  if (ExitingBlock) {
+    dbgs() << "Has exiting block.\n";
+    TripCount = SE_->getSmallConstantTripCount(L, ExitingBlock);
+    TripMultiple = SE_->getSmallConstantTripMultiple(L, ExitingBlock);
+  }
+
+  if (!TripCount) {
+    dbgs() << "Could not find a tripCount for this Loop.\n";
+    return LoopUnrollResult::Unmodified;
+  }
+
+  if (Count > TripCount) {
+    dbgs() << "tripCount is lass than count.\n";
+    Count = TripCount;
+  }
+
+  auto Result = UnrollLoop(L, Count, TripCount, true, true, true, false,
+                           false, TripMultiple, 0, false, LI_, SE_, DT_, AC_,
+                           ORE_, true);
+
+  dbgs() << "\ncount: " << Count
+         << "\ntripCount: " << TripCount
+         << "\ntripMultiple: " << TripMultiple
+         << "\n";
+
+  if (Result == LoopUnrollResult::PartiallyUnrolled)
+      L->setLoopAlreadyUnrolled();
+
+  dbgs() << "LoopUnrollResult: " << toString(Result) << "\n";
+  return Result;
+}
+}
+
 bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
                                 TargetTransformInfo *TTI_,
                                 TargetLibraryInfo *TLI_, AliasAnalysis *AA_,
@@ -4196,6 +4259,16 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
 
   // A general note: the vectorizer must use BoUpSLP::eraseInstruction() to
   // delete instructions.
+
+
+  for (auto BB : post_order(&F.getEntryBlock())) {
+
+  }
+
+
+
+
+
 
   // Scan the blocks in the function in post order.
   for (auto BB : post_order(&F.getEntryBlock())) {
