@@ -12,7 +12,10 @@ class Loop;
 class LoopInfo;
 class OptimizationRemarkEmitter;
 class ScalarEvolution;
+class StoreInst;
 class TargetTransformInfo;
+
+using StoreList = SmallVector<StoreInst*, 8>;
 
 struct SLPAwareLoopUnrollPass : public FunctionPass {
 

@@ -30,6 +30,25 @@ std::string toString(const LoopUnrollResult& LUR) {
 }
 }
 
+unsigned getSmallestStoreSize(const StoreList& SL, unsigned MaxSize) {
+  dbgs() << "SALU: Stors sizes\n";
+  for (auto * SI : SL) {
+    unsigned Size = SI->getValueOperand()->getType()->getScalarSizeInBits();
+    dbgs() << "\t" << Size << "\n";
+    if (Size < MaxSize)
+      MaxSize = Size;
+  }
+  return MaxSize;
+}
+
+void fetchStoreInstructions(BasicBlock* BB, StoreList& SL)
+{
+  for (auto &I : *BB)
+    if (auto *SI = dyn_cast<StoreInst>(&I))
+      if (SI->isSimple())
+        SL.push_back(SI);
+}
+
 unsigned getOptimalUnrollCount(const Loop& L, const TargetTransformInfo& TTI)
 {
   unsigned MaxVecRegSize = TTI.getRegisterBitWidth(true);
@@ -37,9 +56,13 @@ unsigned getOptimalUnrollCount(const Loop& L, const TargetTransformInfo& TTI)
   dbgs() << "SALU: MaxVecRegSize " << MaxVecRegSize
          << " MinVecRegSize " << MinVecRegSize << "\n";
 
+  StoreList SL;
+  for (auto BB : L.getBlocks())
+    fetchStoreInstructions(BB, SL);
 
+  unsigned SmallestStoreSize = getSmallestStoreSize(SL, MaxVecRegSize);
 
-  return 4;
+  return MaxVecRegSize/SmallestStoreSize;
 }
 
 LoopUnrollResult tryToUnrollLoop(unsigned Count, Loop &L, LoopInfo &LI,
@@ -109,6 +132,7 @@ bool SLPAwareLoopUnrollPass::runImpl(Function &F, LoopInfo &LI,
       auto* L = LI.getLoopFor(BB);
 
       if (L && L->getSubLoops().empty()) {
+        dbgs() << "Loop: " << *L << "\n";
         unsigned Count = getOptimalUnrollCount(*L, TTI);
         auto Result = tryToUnrollLoop(Count, *L, LI, SE, DT, AC, ORE);
 
