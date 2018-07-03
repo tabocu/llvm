@@ -4228,6 +4228,8 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
                                 LoopInfo *LI_, DominatorTree *DT_,
                                 AssumptionCache *AC_, DemandedBits *DB_,
                                 OptimizationRemarkEmitter *ORE_) {
+
+
   SE = SE_;
   TTI = TTI_;
   TLI = TLI_;
@@ -4253,6 +4255,13 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
 
   DEBUG(dbgs() << "SLP: Analyzing blocks in " << F.getName() << ".\n");
 
+//  // Unroll Loops before Vectorizing
+//  // TODO: Fetch count factor from architeture target spec
+//  for (auto BB : post_order(&F.getEntryBlock())) {
+//      auto *L = LI->getLoopFor(BB);
+//      if (L && L->getSubLoops().empty())
+//        tryToUnrollLoop(4, L, LI_, SE_, DT_, AC_, ORE_);
+//  }
   // Use the bottom up slp vectorizer to construct chains that start with
   // store instructions.
   BoUpSLP R(&F, SE, TTI, TLI, AA, LI, DT, AC, DB, DL, ORE_);
@@ -4260,13 +4269,6 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
   // A general note: the vectorizer must use BoUpSLP::eraseInstruction() to
   // delete instructions.
 
-  // Unroll Loops before Vectorizing
-  // TODO: Fetch count factor from architeture target spec
-  for (auto BB : post_order(&F.getEntryBlock())) {
-      auto *L = LI->getLoopFor(BB);
-      if (L && L->getSubLoops().empty())
-        tryToUnrollLoop(4, L, LI_, SE_, DT_, AC_, ORE_);
-  }
 
   // Scan the blocks in the function in post order.
   for (auto BB : post_order(&F.getEntryBlock())) {
